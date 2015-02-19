@@ -4,11 +4,14 @@
 //every point.
 //
 //Points can be 2D or 3D but at least three points.
-//Running example: ./planning "(0,0,0);(1,1,1);(2,0,0);(1,-1,1)"
-//Different points should be separated by `;` and cited with`()`, different coordinates
+//Running example:
+//      ./planning "(0,0,0);(1,1,1);(2,0,0);(1,-1,1)"
+//      ./planning "(0,0,0);(1,1,1);(2,0,0);(1,-1,1)" "(0,0,0);(0,1,0);(1,1,-1);(0,0,0)"
+//
+//Different points should be separated by `;` and cited with`()`, different coordinate bits
 //of the same point should be separated by `,`
 //
-//The result will be print
+//The result will be print out
 //
 #include "main.h"
 #include <stdio.h>
@@ -44,7 +47,7 @@ waypoint* addWaypoint(char *rawData){
         char *token2 = strtok_r(token, ",", &end_token);
         while (token2 != NULL)
         {
-            pprev->coordinate[i] = atoi(token2);
+            pprev->coordinate[i] = atof(token2);//convert string into float number
             token2 = strtok_r(NULL, ",", &end_token);
             i ++;
         }
@@ -93,6 +96,39 @@ int pointsArrangement(waypoint **wayp) {
     return counter; //Return total number of points
 }
 
+//Store direction vector from command arguments
+int getVector(char *rawData, waypoint** wayp){
+    char *str = rawData; //The input string.
+    char *end_str;
+    char *token = strtok_r(str, ";", &end_str); //Token stores string split results.
+
+    waypoint* p1 = *wayp;
+    int counter = 0;
+    double norm;
+
+    while (token != NULL)
+    {
+        int i = 0;
+        char *end_token;
+        token ++;
+        token[strlen(token) - 1] = 0;
+        char *token2 = strtok_r(token, ",", &end_token);
+        while (token2 != NULL)
+        {
+            gsl_vector_set(p1->vector,i,atof(token2));
+            token2 = strtok_r(NULL, ",", &end_token);
+            i ++;
+        }
+        norm = gsl_blas_dnrm2(p1->vector);
+        if (norm > 10e-7) gsl_vector_scale(p1->vector,(1/norm)); //NO NORMALIZATION for (0,0,0)
+        p1 = p1->next;
+        counter ++;
+        token = strtok_r(NULL, ";", &end_str);
+    }
+    //copy the first vector into the last one if cycle
+    if (cycle) gsl_vector_memcpy(p1->vector,(*wayp)->vector);
+    return cycle?counter+1:counter;
+}
 //Calculate the direction vector at each point when path going through
 void calculateVector(waypoint **wayp) {
     double norm;                    //Store the vector norm
@@ -106,12 +142,15 @@ void calculateVector(waypoint **wayp) {
     //  vector(i) = point (i+1) - point (i-1)
     //end
     while (p1->next != NULL) {
-        gsl_vector_set(p1->vector,0,p2->coordinate[0]-p0->coordinate[0]);
-        gsl_vector_set(p1->vector,1,p2->coordinate[1]-p0->coordinate[1]);
-        gsl_vector_set(p1->vector,2,p2->coordinate[2]-p0->coordinate[2]);
+        //Do nothing is if has default direction vector
+        if (gsl_blas_dnrm2(p1->vector) < 10e-7) {
+            gsl_vector_set(p1->vector,0,p2->coordinate[0]-p0->coordinate[0]);
+            gsl_vector_set(p1->vector,1,p2->coordinate[1]-p0->coordinate[1]);
+            gsl_vector_set(p1->vector,2,p2->coordinate[2]-p0->coordinate[2]);
 
-        norm = gsl_blas_dnrm2(p1->vector);
-        gsl_vector_scale(p1->vector,(1/norm)); //Normalize the vector
+            norm = gsl_blas_dnrm2(p1->vector);
+            gsl_vector_scale(p1->vector,(1/norm)); //Normalize the vector
+        }
 
         p0 = p1;
         p1 = p2;
@@ -126,31 +165,41 @@ void calculateVector(waypoint **wayp) {
     //  vector(1) = point(2) - point(1)
     //  vector(-1) = point(-1) - point(-2)
     //end
+    //
+    //And do nothing if has default value
     if(cycle) {
-        gsl_vector_set((*wayp)->vector,0,pSecond->coordinate[0]-p0->coordinate[0]);
-        gsl_vector_set((*wayp)->vector,1,pSecond->coordinate[1]-p0->coordinate[1]);
-        gsl_vector_set((*wayp)->vector,2,pSecond->coordinate[2]-p0->coordinate[2]);
-        norm = gsl_blas_dnrm2((*wayp)->vector);
-        gsl_vector_scale((*wayp)->vector,(1/norm));
+        if (gsl_blas_dnrm2((*wayp)->vector) < 10e-7) {
+            gsl_vector_set((*wayp)->vector,0,pSecond->coordinate[0]-p0->coordinate[0]);
+            gsl_vector_set((*wayp)->vector,1,pSecond->coordinate[1]-p0->coordinate[1]);
+            gsl_vector_set((*wayp)->vector,2,pSecond->coordinate[2]-p0->coordinate[2]);
+            norm = gsl_blas_dnrm2((*wayp)->vector);
+            gsl_vector_scale((*wayp)->vector,(1/norm));
+        }
 
-        gsl_vector_set(p1->vector,0,pSecond->coordinate[0]-p0->coordinate[0]);
-        gsl_vector_set(p1->vector,1,pSecond->coordinate[1]-p0->coordinate[1]);
-        gsl_vector_set(p1->vector,2,pSecond->coordinate[2]-p0->coordinate[2]);
-        norm = gsl_blas_dnrm2(p1->vector);
-        gsl_vector_scale(p1->vector,(1/norm));
+        if (gsl_blas_dnrm2(p1->vector) < 10e-7) {
+            gsl_vector_set(p1->vector,0,pSecond->coordinate[0]-p0->coordinate[0]);
+            gsl_vector_set(p1->vector,1,pSecond->coordinate[1]-p0->coordinate[1]);
+            gsl_vector_set(p1->vector,2,pSecond->coordinate[2]-p0->coordinate[2]);
+            norm = gsl_blas_dnrm2(p1->vector);
+            gsl_vector_scale(p1->vector,(1/norm));
+        }
     }
     else {
-        gsl_vector_set((*wayp)->vector,0,pSecond->coordinate[0]-(*wayp)->coordinate[0]);
-        gsl_vector_set((*wayp)->vector,1,pSecond->coordinate[1]-(*wayp)->coordinate[1]);
-        gsl_vector_set((*wayp)->vector,2,pSecond->coordinate[2]-(*wayp)->coordinate[2]);
-        norm = gsl_blas_dnrm2((*wayp)->vector);
-        gsl_vector_scale((*wayp)->vector,(1/norm));
+        if (gsl_blas_dnrm2((*wayp)->vector) < 10e-7) {
+            gsl_vector_set((*wayp)->vector,0,pSecond->coordinate[0]-(*wayp)->coordinate[0]);
+            gsl_vector_set((*wayp)->vector,1,pSecond->coordinate[1]-(*wayp)->coordinate[1]);
+            gsl_vector_set((*wayp)->vector,2,pSecond->coordinate[2]-(*wayp)->coordinate[2]);
+            norm = gsl_blas_dnrm2((*wayp)->vector);
+            gsl_vector_scale((*wayp)->vector,(1/norm));
+        }
 
-        gsl_vector_set(p1->vector,0,p1->coordinate[0]-p0->coordinate[0]);
-        gsl_vector_set(p1->vector,1,p1->coordinate[1]-p0->coordinate[1]);
-        gsl_vector_set(p1->vector,2,p1->coordinate[2]-p0->coordinate[2]);
-        norm = gsl_blas_dnrm2(p1->vector);
-        gsl_vector_scale(p1->vector,(1/norm));
+        if (gsl_blas_dnrm2(p1->vector) < 10e-7) {
+            gsl_vector_set(p1->vector,0,p1->coordinate[0]-p0->coordinate[0]);
+            gsl_vector_set(p1->vector,1,p1->coordinate[1]-p0->coordinate[1]);
+            gsl_vector_set(p1->vector,2,p1->coordinate[2]-p0->coordinate[2]);
+            norm = gsl_blas_dnrm2(p1->vector);
+            gsl_vector_scale(p1->vector,(1/norm));
+        }
     }
 
 }
@@ -223,50 +272,67 @@ void calculateParameter(waypoint **wayp) {
 
 //Do path planning according to control points between each pair of points
 void pathPlanning(waypoint** wayp){
-
+//TODO:
+//1. de casteljau algorithm
+//2. find next point when given current one //either data structure or mathmatic
+//3. embedded into existing navigation system
 }
 
 int main(int argc, char* argv[]) {
-
+    //Input evaluation
     if (argc == 1){
         printf("No Input\n");
         return -1;
     }
-    else if (argc > 2) {
+    else if (argc > 3) {
         printf("Too many arguments\n");
         return -1;
     }
-    else {
-        waypoint *p0 = addWaypoint(argv[1]);
-        waypoint *pCopy = p0;
 
-        int counter = pointsArrangement(&pCopy);
-        printf("%d\n",counter);
-        if (counter < 3) {
-            printf ("Too few points\n");
+    //Store points from command arguments
+    waypoint *p0 = addWaypoint(argv[1]);
+    waypoint *pCopy = p0;
+
+    int counter = pointsArrangement(&pCopy);
+    if (counter < 3) {
+        printf ("Too few points\n");
+        return -1;
+    }
+    pCopy = p0;
+
+    //Store customized vector iff necessary
+    if (argc == 3) {
+        //evaluate # of points and vectors
+        if(getVector(argv[2], &pCopy)!=counter) {
+            printf ("# of Points and # of Vecotor do not match\n");
             return -1;
         }
         pCopy = p0;
-        calculateVector(&pCopy);
-        pCopy = p0;
-        calculateParameter(&pCopy);
-        pCopy = p0;
-
-        //Print out results
-        int i = 1;
-        while (pCopy -> next != NULL) {
-            printf("The control points between the %dth point (%f,%f,%f) and the %dth point (%f,%f,%f) are (%f,%f,%f) (%f,%f,%f)\n"
-                    , i  ,pCopy->coordinate[0],pCopy->coordinate[1],pCopy->coordinate[2]
-                    , (cycle&&i+1==counter)?1:i+1,pCopy->next->coordinate[0],pCopy->next->coordinate[1],pCopy->next->coordinate[2]
-                    , pCopy->firstControl ->coordinate[0],pCopy->firstControl ->coordinate[1],pCopy->firstControl ->coordinate[2]
-                    , pCopy->secondControl->coordinate[0],pCopy->secondControl->coordinate[1],pCopy->secondControl->coordinate[2]
-                    );
-            i ++;
-            pCopy = pCopy -> next;
-
-        }
-        pCopy = p0;
-        pathPlanning(&pCopy);
     }
+
+    pCopy = p0;
+    //Calaulate vectors if no default
+    calculateVector(&pCopy);
+    pCopy = p0;
+
+    //Calaulate parameters
+    calculateParameter(&pCopy);
+    pCopy = p0;
+
+    //Print out results
+    int i = 1;
+    while (pCopy -> next != NULL) {
+        printf("The control points between the %dth point (%f,%f,%f) and the %dth point (%f,%f,%f) are (%f,%f,%f) (%f,%f,%f)\n"
+                , i  ,pCopy->coordinate[0],pCopy->coordinate[1],pCopy->coordinate[2]
+                , (cycle&&i+1==counter)?1:i+1,pCopy->next->coordinate[0],pCopy->next->coordinate[1],pCopy->next->coordinate[2]
+                , pCopy->firstControl ->coordinate[0],pCopy->firstControl ->coordinate[1],pCopy->firstControl ->coordinate[2]
+                , pCopy->secondControl->coordinate[0],pCopy->secondControl->coordinate[1],pCopy->secondControl->coordinate[2]
+                );
+        i ++;
+        pCopy = pCopy -> next;
+
+    }
+    pCopy = p0;
+    pathPlanning(&pCopy);
     return 0;
 }

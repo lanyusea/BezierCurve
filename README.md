@@ -1,6 +1,6 @@
 ##This is a pure C implementation of Hobby's Algorithm.
 
-It is easy to draw the bazier curve when given control points between the starting point and the ending point.
+It is easy to draw the bezier curve when given control points between the starting point and the ending point.
 But it is not easy to draw the bezier curve which passes through a set of given points. 
 
 Hobby's Algorithm can calculate the control points automatically with or without a given direction vector when passing throught each point.
